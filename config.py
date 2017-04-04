@@ -29,6 +29,11 @@ def get_args():
                         default=False,
                         help='use cuda GPU or not')
 
+    parser.add_argument('--model_file',
+                        type=str,
+                        default="model.th",
+                        help='model file')
+
 
     # Data file
     parser.add_argument('--train_file',
@@ -46,11 +51,6 @@ def get_args():
                         default=None,
                         help='Pre-trained model.')
 
-    parser.add_argument('--model_file',
-                        type=str,
-                        default='model.pkl.gz',
-                        help='Model file to save')
-
     parser.add_argument('--log_file',
                         type=str,
                         default=None,
@@ -61,9 +61,14 @@ def get_args():
                         default=None,
                         help='Word embedding file')
 
+    parser.add_argument('--max_train',
+                        type=int,
+                        default=10000,
+                        help='Maximum number of dev examples to evaluate on')
+
     parser.add_argument('--max_dev',
                         type=int,
-                        default=None,
+                        default=1000,
                         help='Maximum number of dev examples to evaluate on')
 
     parser.add_argument('--vocab_size', 
