@@ -34,6 +34,12 @@ def get_args():
                         default="model.th",
                         help='model file')
 
+    parser.add_argument('--model',
+                        type=str,
+                        default="WordAveragingModel",
+                        help='choose the model')
+
+
 
     # Data file
     parser.add_argument('--train_file',
@@ -46,6 +52,11 @@ def get_args():
                         default=None,
                         help='Development file')
 
+    parser.add_argument('--test_file',
+                        type=str,
+                        default=None,
+                        help='test file')
+
     parser.add_argument('--pre_trained',
                         type=str,
                         default=None,
@@ -55,6 +66,11 @@ def get_args():
                         type=str,
                         default=None,
                         help='Log file')
+
+    parser.add_argument('--dict_file',
+                        type=str,
+                        default="dict.pkl",
+                        help='dictionary file')
 
     parser.add_argument('--embedding_file',
                         type=str,

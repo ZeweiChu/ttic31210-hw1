@@ -31,7 +31,8 @@ def build_dict(sentences, max_words=50000):
         for w in sent:
             word_count[w] += 1
     ls = word_count.most_common(max_words)
-    return {w[0]: index+1 for (index, w) in enumerate(ls)}
+    total_words = len(ls) + 1
+    return {w[0]: index+1 for (index, w) in enumerate(ls)}, total_words
 
 def encode(examples, word_dict, sort_by_len=True):
     '''
