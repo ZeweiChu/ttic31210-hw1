@@ -29,6 +29,7 @@ print(data.size())
 # print(model.embed.weight.data)
 
 word2id = pickle.load(open( "dict.pkl", "rb" ))
+word2id['UNK'] = 0
 id2word = {word2id[key]: key for key in word2id}
 print(len(id2word))
 
