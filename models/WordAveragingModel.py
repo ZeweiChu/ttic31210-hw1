@@ -45,14 +45,18 @@ class WeightedWordAveragingModel(nn.Module):
 
 		w = self.w.unsqueeze(0).unsqueeze(1).expand_as(d_embedded)
 		w = torch.sum(d_embedded * w, 2).squeeze(2) # B * T
-		print(w)
-		w_max = torch.max(w)[0]
-		w_max = w_max.unsqueeze(0)
+		# print('#' * 50)
+		# print(w.size())
+		# print(torch.max(w, 1))
+		w_max = torch.max(w, 1)[0]
+		# w_max = w_max.unsqueeze(0)
 
-		print(w.size(), w_max.size())
+		# print(w.size(), w_max.size())
 		w_max = w_max.expand_as(w)
+		w_max.data[w_max.data < 0] = 0
 		# code.interact(local=locals())
 		w = torch.exp(w - w_max)
+		# print(w)
 		w_sum = torch.sum(w * mask_d, 1)
 		w_sum = w_sum.expand_as(w) 
 		w = w / w_sum * mask_d
