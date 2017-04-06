@@ -12,8 +12,9 @@ from torch import optim
 from torch.nn import MSELoss
 import progressbar
 import pickle
+import math
 
-def eval(model, data, args):
+def eval(model, data, args, att_dict={}):
 	total_dev_batches = len(data)
 	correct_count = 0.
 	bar = progressbar.ProgressBar(max_value=total_dev_batches).start()
@@ -27,7 +28,7 @@ def eval(model, data, args):
 		# print("after")
 		# print(mb_d)
 		mb_mask_d = Variable(torch.from_numpy(mb_mask_d))
-		mb_out = model(mb_d, mb_mask_d)
+		mb_out = model(mb_d, mb_mask_d, att_dict)
 		# print(mb_out)
 
 		batch_size = mb_d.size(0)
@@ -60,6 +61,7 @@ def main(args):
 	args.num_dev = len(dev_examples[0])
 
 	word_dict, args.vocab_size = utils.build_dict(train_examples[0], max_words=args.vocab_size)
+	word_dict["UNK"] = 0
 	pickle.dump(word_dict, open(args.dict_file, "wb"))
 
 	docs, labels = utils.encode(train_examples, word_dict)
@@ -75,6 +77,8 @@ def main(args):
 		t_docs, t_labels = utils.encode(test_examples, word_dict)
 		all_test = utils.gen_examples(t_docs, t_labels, args.batch_size)
 	
+	att_dict = {}
+
 	if os.path.exists(args.model_file):
 		model = torch.load(args.model_file)
 	elif args.model == "WordAveragingModel":
@@ -95,13 +99,46 @@ def main(args):
 		print("dev loss %f" % loss)
 		return 0
 
-	correct_count, loss = eval(model, all_dev, args)
+	correct_count, loss = eval(model, all_dev, args, att_dict)
 	print("dev accuracy %f" % (float(correct_count) / float(args.num_dev)))
 	loss = loss / args.num_dev
 	print("dev loss %f" % loss)
 
-	optimizer = optim.Adam(model.parameters(), lr=0.01)
+	if args.check_att:
+		# word_att = {w: att_dict[word_dict[w]] if word_dict[w] in att_dict else [] for w in word_dict}
+		# word_att_std = {w: np.std(word_att[w]) for w in word_att}
+		att_dict = {w: att_dict[w] if w in att_dict else [] for w in word_dict.values()}
+
+		att_dict_mean = {w: np.mean(att_dict[w]) for w in att_dict if len(att_dict[w]) > 0}
+
+		att_dict_std = {w: np.std(att_dict[w]) for w in att_dict if len(att_dict[w]) > 0}
+		# att_dict_std = {w: att_dict_std[w] for w in att_dict_std if not math.isnan(att_dict_std[w])}
+
+		order_mean = sorted(att_dict_mean.keys(), key=lambda x: att_dict_mean[x])
+		order_std = sorted(att_dict_std.keys(), key=lambda x: att_dict_std[x])
+
+		# order = [w for w in order if not math.isnan(att_dict_std[w])]
+
+		id2word = {word_dict[key]: key for key in word_dict}
+		top_std = {id2word[w]: att_dict_std[w] for w in order_std[:100]}
+		bottom_std = {id2word[w]: att_dict_std[w] for w in order_std[-100:]}
+
+		top_mean = {id2word[w]: att_dict_std[w] for w in order_mean[:100]}
+		bottom_mean = {id2word[w]: att_dict_std[w] for w in order_mean[-100:]}
+
+		code.interact(local=locals())
+		return(0)
+
+	learning_rate = args.learning_rate
+	if args.optimizer == "SGD":
+		optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+	elif args.optimizer == "Adam":
+		optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 	best_loss = loss
+
+
+
+
 	for epoch in range(args.num_epoches):
 		
 		np.random.shuffle(all_train)
@@ -125,6 +162,10 @@ def main(args):
 		
 			optimizer.zero_grad()
 			loss.backward()
+			for p in model.parameters():
+				grad = p.grad.data.numpy()
+				grad[np.isnan(grad)] = 0
+				p.grad.data = torch.Tensor(grad)
 			optimizer.step()
 			bar.update(idx+1)
 		bar.finish()
@@ -133,15 +174,24 @@ def main(args):
 		print("start evaluating on dev")
 		# print(all_dev)
 		correct_count, loss = eval(model, all_dev, args)
-		print("correct count %f" % correct_count)
-		print("total count %d" % args.num_dev)
+		# print("correct count %f" % correct_count)
+		# print("total count %d" % args.num_dev)
 		print("dev accuracy %f" % (float(correct_count) / float(args.num_dev)))
 		loss = loss / args.num_dev
 		print("dev loss %f" % loss)
 
 		if loss < best_loss:
 			torch.save(model, args.model_file)
+		else:
+			learning_rate *= 0.5
+			if args.optimizer == "SGD":
+				optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+			elif args.optimizer == "Adam":
+				optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
+
+def analyze_weights(data, model):
+	pass
 
 if __name__ == "__main__":
 	args = config.get_args()

@@ -39,6 +39,15 @@ def get_args():
                         default="WordAveragingModel",
                         help='choose the model')
 
+    parser.add_argument('--check_att',
+                        type=bool,
+                        default=False,
+                        help='only check the att map')
+
+    parser.add_argument('--att_type',
+                        type=str,
+                        default="vanilla",
+                        help='type of attention function')
 
 
     # Data file
@@ -151,7 +160,7 @@ def get_args():
 
     parser.add_argument('--optimizer',
                         type=str,
-                        default='sgd',
+                        default='SGD',
                         help='Optimizer: sgd (default) or adam or rmsprop')
 
     parser.add_argument('--learning_rate', '-lr',
