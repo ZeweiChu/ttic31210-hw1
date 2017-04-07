@@ -18,6 +18,9 @@ def load_data(in_file, max_example=None, relabeling=True):
             docs.append(line[0].split())
             labels.append(line[1])
             num_examples += 1
+        else:
+            docs.append(line[0].split())
+            num_examples += 1
 
         if (max_example is not None) and (num_examples >= max_example):
             break
@@ -34,20 +37,33 @@ def build_dict(sentences, max_words=50000):
     total_words = len(ls) + 1
     return {w[0]: index+1 for (index, w) in enumerate(ls)}, total_words
 
-def encode(examples, word_dict, sort_by_len=True):
+def encode(examples, word_dict, pos_examples=None, pos_dict=None, sort_by_len=True):
     '''
         Encode the sequences. 
     '''
     in_doc = []
     in_l = []
+    in_pos = []
 
-    for idx, (d_words, l_words) in enumerate(zip(examples[0], examples[1])):
-        seq1 = [word_dict[w] if w in word_dict else 0 for w in d_words]
-        seq2 = [int(w) for w in l_words]
-        
-        if len(seq1) > 0:
-            in_doc.append(seq1)
-            in_l.append(seq2)
+    
+    if pos_examples is not None:
+        for idx, (d_words, l_words, pos_words) in enumerate(zip(examples[0], examples[1], pos_examples[0])):
+            seq1 = [word_dict[w] if w in word_dict else 0 for w in d_words]
+            seq2 = [int(w) for w in l_words]
+            seq3 = [pos_dict[w] if w in pos_dict else 0 for w in pos_words]
+            
+            if len(seq1) > 0:
+                in_doc.append(seq1)
+                in_l.append(seq2)
+                in_pos.append(seq3)
+    else:
+        for idx, (d_words, l_words) in enumerate(zip(examples[0], examples[1])):
+            seq1 = [word_dict[w] if w in word_dict else 0 for w in d_words]
+            seq2 = [int(w) for w in l_words]
+            
+            if len(seq1) > 0:
+                in_doc.append(seq1)
+                in_l.append(seq2)
 
     def len_argsort(seq):
         return sorted(range(len(seq)), key=lambda x: len(seq[x]))
@@ -57,8 +73,13 @@ def encode(examples, word_dict, sort_by_len=True):
         sorted_index = len_argsort(in_doc)
         in_doc = [in_doc[i] for i in sorted_index]
         in_l = [in_l[i] for i in sorted_index]
+        if pos_examples is not None:
+            in_pos = [in_pos[i] for i in sorted_index]
 
-    return in_doc, in_l
+    if pos_examples is not None:
+        return in_doc, in_l, in_pos
+    else:
+        return in_doc, in_l
 
 def get_minibatches(n, minibatch_size, shuffle=False):
     idx_list = np.arange(0, n, minibatch_size)
@@ -80,7 +101,7 @@ def prepare_data(seqs):
         x_mask[idx, :lengths[idx]] = 1.0
     return x, x_mask
 
-def gen_examples(d, l, batch_size):
+def gen_examples(d, l, batch_size, pos=None):
 
     minibatches = get_minibatches(len(d), batch_size)
     all_ex = []
@@ -88,7 +109,12 @@ def gen_examples(d, l, batch_size):
         mb_d = [d[t] for t in minibatch]
         mb_l = [l[t] for t in minibatch]
         mb_d, mb_mask_d = prepare_data(mb_d)
-        all_ex.append((mb_d, mb_mask_d, mb_l))
+        if pos is not None:
+            mb_pos = [pos[t] for t in minibatch]
+            mb_pos, mb_mask_pos = prepare_data(mb_pos)
+            all_ex.append((mb_d, mb_mask_d, mb_l, mb_pos))
+        else:
+            all_ex.append((mb_d, mb_mask_d, mb_l))
     return all_ex
 
 

@@ -66,6 +66,21 @@ def get_args():
                         default=None,
                         help='test file')
 
+    parser.add_argument('--train_pos_file',
+                        type=str,
+                        default=None,
+                        help='Training pos file')
+
+    parser.add_argument('--dev_pos_file',
+                        type=str,
+                        default=None,
+                        help='Development pos file')
+
+    parser.add_argument('--test_pos_file',
+                        type=str,
+                        default=None,
+                        help='test pos file')
+
     parser.add_argument('--pre_trained',
                         type=str,
                         default=None,
@@ -112,6 +127,11 @@ def get_args():
                         default=300,
                         help='Default embedding size if embedding_file is not given')
 
+    parser.add_argument('--pos_embedding_size',
+                        type=int,
+                        default=30,
+                        help='Default pos tag embedding size if embedding_file is not given')
+
     parser.add_argument('--hidden_size',
                         type=int,
                         default=128,
@@ -148,10 +168,10 @@ def get_args():
                         default=100,
                         help='Number of epoches')
 
-    parser.add_argument('--eval_iter',
+    parser.add_argument('--eval_epoch',
                         type=int,
-                        default=100,
-                        help='Evaluation on dev set after K updates')
+                        default=5,
+                        help='Evaluation on dev set after K epochs')
 
     parser.add_argument('--dropout_rate',
                         type=float,

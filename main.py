@@ -14,7 +14,7 @@ import progressbar
 import pickle
 import math
 
-def eval(model, data, args, att_dict={}):
+def eval(model, data, args, pos_data=None, att_dict={}):
 	total_dev_batches = len(data)
 	correct_count = 0.
 	bar = progressbar.ProgressBar(max_value=total_dev_batches).start()
@@ -22,6 +22,7 @@ def eval(model, data, args, att_dict={}):
 
 	print("total dev %d" % total_dev_batches)
 
+	# code.interact(local=locals())
 	for idx, (mb_d, mb_mask_d, mb_l) in enumerate(data):
 		# print(mb_d)
 		mb_d = Variable(torch.from_numpy(mb_d)).long()
@@ -52,24 +53,42 @@ def main(args):
 	# train_examples contains (docs, questions, candidates, answers)
 	if args.debug:
 		train_examples = utils.load_data(args.train_file, max_example=args.max_train)
-		dev_examples = utils.load_data(args.dev_file, max_example=args.max_dev)		
+		dev_examples = utils.load_data(args.dev_file, max_example=args.max_dev)	
+		if args.att_type == "pos_tag":
+			train_pos_examples = utils.load_data(args.train_pos_file, max_example=args.max_train)
+			dev_pos_examples = utils.load_data(args.dev_pos_file, max_example=args.max_dev)	
 	else: 
 		train_examples = utils.load_data(args.train_file)
 		dev_examples = utils.load_data(args.dev_file)
+		if args.att_type == "pos_tag":
+			train_pos_examples = utils.load_data(args.train_pos_file)
+			dev_pos_examples = utils.load_data(args.dev_pos_file)	
 
 	args.num_train = len(train_examples[0])
 	args.num_dev = len(dev_examples[0])
 
 	word_dict, args.vocab_size = utils.build_dict(train_examples[0], max_words=args.vocab_size)
 	word_dict["UNK"] = 0
+	if args.att_type == "pos_tag":
+		pos_tag_dict, args.pos_tag_vocab_size = utils.build_dict(train_pos_examples[0], max_words=args.vocab_size)
+		pos_tag_dict["UNK"] = 0
 	pickle.dump(word_dict, open(args.dict_file, "wb"))
 
 	docs, labels = utils.encode(train_examples, word_dict)
 	all_train = utils.gen_examples(docs, labels, args.batch_size)
-
+	
 	d_docs, d_labels = utils.encode(dev_examples, word_dict)
 	total_dev = len(d_docs)
 	all_dev = utils.gen_examples(d_docs, d_labels, args.batch_size)
+	
+	if args.att_type == "pos_tag":
+		pos_docs, pos_labels = utils.encode(train_pos_examples, pos_tag_dict)
+		pos_all_train = utils.gen_examples(pos_docs, pos_labels, args.batch_size)
+		
+		pos_d_docs, pos_d_labels = utils.encode(dev_pos_examples, pos_tag_dict)
+		pos_all_dev = utils.gen_examples(pos_d_docs, pos_d_labels, args.batch_size)
+
+	# code.interact(local=locals())
 
 	if args.test_only:
 		test_examples = utils.load_data(args.test_file)
@@ -99,8 +118,14 @@ def main(args):
 		print("dev loss %f" % loss)
 		return 0
 
-	correct_count, loss = eval(model, all_dev, args, att_dict)
-	print("dev accuracy %f" % (float(correct_count) / float(args.num_dev)))
+
+	if args.att_type == "pos_tag":
+		correct_count, loss = eval(model, all_dev, args, pos_all_dev, att_dict)
+	else:
+		correct_count, loss = eval(model, all_dev, args, att_dict)
+	acc = float(correct_count) / float(args.num_dev)
+	best_acc = acc
+	print("dev accuracy %f" % acc)
 	loss = loss / args.num_dev
 	print("dev loss %f" % loss)
 
@@ -126,7 +151,7 @@ def main(args):
 		top_mean = {id2word[w]: att_dict_std[w] for w in order_mean[:100]}
 		bottom_mean = {id2word[w]: att_dict_std[w] for w in order_mean[-100:]}
 
-		code.interact(local=locals())
+		# code.interact(local=locals())
 		return(0)
 
 	learning_rate = args.learning_rate
@@ -139,55 +164,117 @@ def main(args):
 
 
 
+
 	for epoch in range(args.num_epoches):
 		
 		np.random.shuffle(all_train)
 
-		bar = progressbar.ProgressBar(max_value=len(all_train), redirect_stdout=True)
+		num_batches = len(all_train)
+		bar = progressbar.ProgressBar(max_value= num_batches * args.eval_epoch, redirect_stdout=True)
 		total_train_loss = 0.
-		for idx, (mb_d, mb_mask_d, mb_l) in enumerate(all_train):
+		if args.att_type == "pos_tag":
+			# code.interact(lcoal=locals())
+			for idx, (mb_d, mb_mask_d, mb_l) in enumerate(all_train):
 
-			mb_d = Variable(torch.from_numpy(mb_d)).long()
-			mb_mask_d = Variable(torch.from_numpy(mb_mask_d))
-			mb_out = model(mb_d, mb_mask_d)
-			# print(mb_out)
+				mb_d = Variable(torch.from_numpy(mb_d)).long()
+				mb_mask_d = Variable(torch.from_numpy(mb_mask_d))
+				mb_out = model(mb_d, mb_mask_d)
+				# print(mb_out)
 
-			batch_size = mb_d.size(0)
-			mb_a = Variable(torch.Tensor(mb_l).type_as(mb_out.data)).view(batch_size, -1)
-			# cross entropy loss
-			loss = (- mb_a * torch.log(mb_out + 1e-9) - (1. - mb_a) * torch.log(1. - mb_out + 1e-9)).sum() # / batch_size
-			total_train_loss += loss.data[0]
-			loss = loss / batch_size
-			# loss = (torch.abs(mb_a - mb_out) * torch.log(torch.abs(mb_a - mb_out) + 1e-9)).sum() / batch_size
-		
-			optimizer.zero_grad()
-			loss.backward()
-			for p in model.parameters():
-				grad = p.grad.data.numpy()
-				grad[np.isnan(grad)] = 0
-				p.grad.data = torch.Tensor(grad)
-			optimizer.step()
-			bar.update(idx+1)
-		bar.finish()
-		print("training loss: %f" % (total_train_loss / args.num_train))
+				batch_size = mb_d.size(0)
+				mb_a = Variable(torch.Tensor(mb_l).type_as(mb_out.data)).view(batch_size, -1)
+				# cross entropy loss
+				loss = (- mb_a * torch.log(mb_out + 1e-9) - (1. - mb_a) * torch.log(1. - mb_out + 1e-9)).sum() # / batch_size
+				total_train_loss += loss.data[0]
+				loss = loss / batch_size
+				# loss = (torch.abs(mb_a - mb_out) * torch.log(torch.abs(mb_a - mb_out) + 1e-9)).sum() / batch_size
+			
+				optimizer.zero_grad()
+				loss.backward()
+				# for p in model.parameters():
+				# 	grad = p.grad.data.numpy()
+				# 	grad[np.isnan(grad)] = 0
+				# 	p.grad.data = torch.Tensor(grad)
+				optimizer.step()
+				bar.update(num_batches * (epoch % args.eval_epoch) + idx +1)
+			
+			bar.finish()
+			print("training loss: %f" % (total_train_loss / args.num_train * args.eval_epoch))
 
-		print("start evaluating on dev")
-		# print(all_dev)
-		correct_count, loss = eval(model, all_dev, args)
-		# print("correct count %f" % correct_count)
-		# print("total count %d" % args.num_dev)
-		print("dev accuracy %f" % (float(correct_count) / float(args.num_dev)))
-		loss = loss / args.num_dev
-		print("dev loss %f" % loss)
+			if (epoch+1) % args.eval_epoch == 0:
+				
 
-		if loss < best_loss:
-			torch.save(model, args.model_file)
+				print("start evaluating on dev...")
+				# print(all_dev)
+				correct_count, loss = eval(model, all_dev, args)
+				# print("correct count %f" % correct_count)
+				# print("total count %d" % args.num_dev)
+				print("dev accuracy %f" % (float(correct_count) / float(args.num_dev)))
+				loss = loss / args.num_dev
+				print("dev loss %f" % loss)
+
+				if loss < best_loss:
+					torch.save(model, args.model_file)
+				else:
+					learning_rate *= 0.5
+					if args.optimizer == "SGD":
+						optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+					elif args.optimizer == "Adam":
+						optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+				print("#" * 60)
 		else:
-			learning_rate *= 0.5
-			if args.optimizer == "SGD":
-				optimizer = optim.SGD(model.parameters(), lr=learning_rate)
-			elif args.optimizer == "Adam":
-				optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+			for idx, (mb_d, mb_mask_d, mb_l) in enumerate(all_train):
+
+				mb_d = Variable(torch.from_numpy(mb_d)).long()
+				mb_mask_d = Variable(torch.from_numpy(mb_mask_d))
+				mb_out = model(mb_d, mb_mask_d)
+				# print(mb_out)
+
+				batch_size = mb_d.size(0)
+				mb_a = Variable(torch.Tensor(mb_l).type_as(mb_out.data)).view(batch_size, -1)
+				# cross entropy loss
+				loss = (- mb_a * torch.log(mb_out + 1e-9) - (1. - mb_a) * torch.log(1. - mb_out + 1e-9)).sum() # / batch_size
+				total_train_loss += loss.data[0]
+				loss = loss / batch_size
+				# loss = (torch.abs(mb_a - mb_out) * torch.log(torch.abs(mb_a - mb_out) + 1e-9)).sum() / batch_size
+			
+				optimizer.zero_grad()
+				loss.backward()
+				# for p in model.parameters():
+				# 	grad = p.grad.data.numpy()
+				# 	grad[np.isnan(grad)] = 0
+				# 	p.grad.data = torch.Tensor(grad)
+				optimizer.step()
+				bar.update(num_batches * (epoch % args.eval_epoch) + idx +1)
+			
+			bar.finish()
+			print("training loss: %f" % (total_train_loss / args.num_train * args.eval_epoch))
+
+			if (epoch+1) % args.eval_epoch == 0:
+				
+
+				print("start evaluating on dev...")
+				# print(all_dev)
+				correct_count, loss = eval(model, all_dev, args)
+				# print("correct count %f" % correct_count)
+				# print("total count %d" % args.num_dev)
+				acc = float(correct_count) / float(args.num_dev)
+				print("dev accuracy %f" % acc)
+				loss = loss / args.num_dev
+				print("dev loss %f" % loss)
+				print("best dev accuracy: %f" % best_acc)
+
+				if acc > best_acc:
+					torch.save(model, args.model_file)
+					best_acc = acc
+					print("model saved...")
+				else:
+					learning_rate *= 0.5
+					if args.optimizer == "SGD":
+						optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+					elif args.optimizer == "Adam":
+						optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+				print("#" * 60)
 
 
 def analyze_weights(data, model):
