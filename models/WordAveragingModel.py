@@ -16,7 +16,7 @@ class WordAveragingModel(nn.Module):
 		self.p_vector = nn.Parameter(torch.ones(args.embedding_size))
 		self.embed.weight.data.uniform_(-1, 1)
 
-	def forward(self, d, mask_d, att_dict=None):
+	def forward(self, d, mask_d, att_dict=None, check_att=False):
 		d_embedded = self.embed(d)
 		mask_d = mask_d.unsqueeze(2).expand_as(d_embedded)
 		d_embedded = d_embedded * mask_d
